@@ -9,7 +9,10 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:noreply@yahoi.jp}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       PORT: 3000
+    volumes:
+      - ./.env:/app/.env
     networks:
       - pushnet
 

@@ -13,6 +13,7 @@ subscriptionを自分のDB等で保持し、送信のたびにこのAPIへ渡す
 
 - `GET /vapid-public-key` — VAPID公開鍵取得（クライアント側の`pushManager.subscribe()`に使用）
 - `POST /send` — Push通知送信
+- `GET /settings` — 環境設定WebUI（Basic認証必須）
 - `GET /health` — ヘルスチェック
 - `GET /docs` — Scalar による API ドキュメント UI
 - `GET /openapi.json` — OpenAPI 3.0 スペック
@@ -22,9 +23,12 @@ subscriptionを自分のDB等で保持し、送信のたびにこのAPIへ渡す
 ```
 src/
 ├── index.js               # エントリーポイント・ルート登録
+├── lib/
+│   └── envFile.js          # .env の読み書き
 └── routes/
     ├── send.js             # POST /send
     ├── vapidPublicKey.js   # GET /vapid-public-key
+    ├── settingsPage.js     # GET/POST /settings のHTML
     └── health.js           # GET /health
 ```
 
@@ -41,6 +45,7 @@ npx web-push generate-vapid-keys
 | `VAPID_PUBLIC_KEY` | ✅ | VAPID公開鍵 |
 | `VAPID_PRIVATE_KEY` | ✅ | VAPID秘密鍵 |
 | `VAPID_SUBJECT` | — | `mailto:` または `https://` のURL（省略時: `mailto:noreply@yahoi.jp`）|
+| `ADMIN_PASSWORD` | ✅ | `/settings` のBasic認証パスワード（ユーザー名は`admin`固定）|
 
 ## 起動
 
@@ -103,6 +108,13 @@ const subscription = await registration.pushManager.subscribe({
 ```
 
 詳細は `http://localhost:8766/docs` を参照。
+
+## 環境設定WebUI (`/settings`)
+
+`.env` の値をブラウザから閲覧・編集できる。`admin` / `ADMIN_PASSWORD` のBasic認証で保護されている。
+
+保存すると `.env` ファイルが書き換わるだけで、コンテナは自動再起動しない。反映するには
+`docker compose restart`（または `run.sh` の「更新 & 再起動」）を実行する。
 
 ## 開発
 
