@@ -389,11 +389,17 @@ subscriptionを保持する。認証なし（`/send`自体が認証なしのた�
    に新しい値が書き込まれる
 2. Node.jsプロセスの`process.env`はプロセス起動時に一度読み込まれるだけなので、
    ファイルを書き換えても実行中のプロセスには反映されない
-3. 反映するには明示的にコンテナを再起動する必要がある:
+3. 反映するには明示的にコンテナを再作成する必要がある:
 
 ```bash
-docker compose restart
+docker compose up -d
 ```
+
+**`docker compose restart`ではダメ。** Composeの`environment:`にある`${LINE_CHANNEL_ACCESS_TOKEN}`等の
+変数展開は`up`実行時にしか評価されないため、`restart`は起動済みコンテナに焼き込まれた古い環境変数の
+ままプロセスを再起動するだけになる。実際にこの手順の誤りにより、LINE連携のトークンが最初
+反映されずハマった（`.env`は正しいのにコンテナ内`process.env`が空、という状態になった）。
+`.env`を変更したときは必ず`up -d`（`run.sh`なら「2. 起動」）を使うこと。
 
 自動再起動を実装しない理由: コンテナ自身がdocker composeを操作できるようにするには
 `docker.sock`をコンテナにマウントする必要があり、そのコンテナが侵害された場合ホスト全体の
@@ -424,7 +430,8 @@ pushmanのWeb Pushは追加実装なしでスマートフォンにも届く。
 おやすみモードがオンだと画面に出ない（通知センターには記録される）。
 
 **`/settings`で保存したのに反映されない**
-→ 保存は`.env`ファイルへの書き込みのみ。`docker compose restart`を実行したか確認する。
+→ 保存は`.env`ファイルへの書き込みのみ。`docker compose up -d`を実行したか確認する
+（`docker compose restart`では反映されない。[環境設定WebUI](#環境設定webui-settings)参照）。
 
 **`/settings`にアクセスすると500が返る**
 → `ADMIN_PASSWORD`が`.env`に設定されていない。設定して再起動する。
