@@ -1,6 +1,7 @@
 import { renderNav, renderBrand } from '../lib/nav.js'
 import { PAGE_STYLE } from '../lib/theme.js'
 import { FAVICON_LINK } from '../lib/favicon.js'
+import { renderLogo } from '../lib/logo.js'
 
 export function renderHomePage() {
   return `<!doctype html>
@@ -16,8 +17,7 @@ ${FAVICON_LINK}
   ${renderNav('/')}
 
   <div class="hero">
-    <img src="/favicon.svg" alt="Pushman">
-    <h1>Pushman</h1>
+    <div class="logo-hero">${renderLogo('hero')}</div>
     <p class="desc">VAPIDを使ったWeb Push通知送信API。ブラウザとLINE、2つのチャネルに対応。</p>
     <span class="badge" id="statusBadge"><span class="dot"></span><span id="statusText">確認中...</span></span>
   </div>

@@ -55,14 +55,13 @@ hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
 a { color: var(--accent); }
 
 .brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  display: inline-block;
   text-decoration: none;
   margin-bottom: 14px;
 }
-.brand img { width: 24px; height: 24px; }
-.brand span { font-weight: 600; font-size: 0.95rem; color: var(--text); }
+.brand svg { display: block; width: 120px; height: auto; }
+
+.logo-hero svg { display: block; width: 220px; height: auto; margin: 0 auto; }
 
 nav.tabs {
   display: flex;
@@ -130,7 +129,7 @@ button:disabled { background: #333c4a; color: #6b7484; cursor: not-allowed; box-
 .warning { background: var(--warning-bg); border-color: var(--warning-border); color: var(--warning-text); }
 
 .hero { text-align: center; padding: 8px 0 36px; }
-.hero img { width: 88px; height: 88px; margin-bottom: 12px; }
+.hero .logo-hero { margin-bottom: 16px; }
 .hero p.desc { margin: 0 0 12px; }
 
 .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--text-dim); }

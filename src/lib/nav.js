@@ -1,3 +1,5 @@
+import { renderLogo } from './logo.js'
+
 export const NAV_ITEMS = [
   { path: '/', label: 'ホーム' },
   { path: '/docs', label: 'APIドキュメント' },
@@ -6,7 +8,7 @@ export const NAV_ITEMS = [
 ]
 
 export function renderBrand() {
-  return `<a class="brand" href="/"><img src="/favicon.svg" alt=""><span>Pushman</span></a>`
+  return `<a class="brand" href="/">${renderLogo('nav')}</a>`
 }
 
 export function renderNav(activePath) {
