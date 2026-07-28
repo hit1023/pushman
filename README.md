@@ -1,89 +1,184 @@
 # pushman
 
 VAPID (`web-push`) を使ったシンプルなWeb Push通知送信 REST API。
-Hono + OpenAPI で構築され、Docker で動作する。mailman のPush版。
+Hono + OpenAPI で構築され、Docker で動作する。[mailman](https://github.com/hit1023/mailman)のPush版。
+
+## 目次
+
+- [概要](#概要)
+- [設計方針](#設計方針)
+- [VAPIDとは（Resendとの違い）](#vapidとはresendとの違い)
+- [画面・エンドポイント一覧](#画面エンドポイント一覧)
+- [ディレクトリ構成](#ディレクトリ構成)
+- [環境変数](#環境変数)
+- [ローカル開発](#ローカル開発)
+- [Dockerでの起動](#dockerでの起動)
+- [本番デプロイ (h-1)](#本番デプロイ-h-1)
+- [API仕様](#api仕様)
+- [ブラウザ側の購読方法](#ブラウザ側の購読方法)
+- [テスト送信ページ (`/test`)](#テスト送信ページ-test)
+- [環境設定WebUI (`/settings`)](#環境設定webui-settings)
+- [スマートフォンでの利用について](#スマートフォンでの利用について)
+- [トラブルシューティング](#トラブルシューティング)
+
+## 概要
+
+自作のWebアプリ・ツールに「ブラウザのプッシュ通知を送る」機能を足したいときに、毎回
+VAPID鍵管理や`web-push`ライブラリの扱いを実装しなくて済むよう、共通のHTTP APIとして
+切り出した小さなマイクロサービス。呼び出し側は購読情報(PushSubscription)とタイトル・本文を
+JSONでPOSTするだけで、ブラウザに通知を送れる。
+
+mailmanと構成・見た目（Hono + OpenAPI + Docker + `/settings` + `/test` + タブナビゲーション）を
+意図的に揃えてある。
 
 ## 設計方針
 
-このAPIは購読情報（PushSubscription）を保存しない。呼び出し元アプリがブラウザから取得した
-subscriptionを自分のDB等で保持し、送信のたびにこのAPIへ渡す（mailmanが宛先メールアドレスの
-一覧を持たないのと同じ考え方）。
+このAPIは**購読情報（PushSubscription）を保存しない、ステートレスな設計**にしている。
 
-## 機能
+- 呼び出し元アプリ（＝このAPIを使う側のWebアプリ）が、ブラウザから取得した`PushSubscription`
+  オブジェクトを自分のDB等で保持する
+- 通知を送りたいタイミングで、保持しているsubscriptionをそのままこのAPIの`POST /send`に渡す
+- pushman自身はその場でVAPID署名して送るだけで、誰にどんな通知を送ったかの記録は残さない
 
-- `GET /` — ホーム（タブナビゲーション）
-- `GET /vapid-public-key` — VAPID公開鍵取得（クライアント側の`pushManager.subscribe()`に使用）
-- `POST /send` — Push通知送信
-- `GET /test` — ブラウザからテスト送信できるページ（HTTPS必須）
-- `GET /sw.js` — テストページ用のService Worker
-- `GET /settings` — 環境設定WebUI（Basic認証必須）
-- `GET /health` — ヘルスチェック
-- `GET /docs` — API ドキュメント（タブ内にScalar UIをiframe埋め込み）
-- `GET /api-docs` — Scalar による API ドキュメント UI 本体
-- `GET /openapi.json` — OpenAPI 3.0 スペック
+これはmailmanが「宛先メールアドレスの一覧」を持たないのと同じ考え方で、
+「配信先リストの管理」と「実際の配信処理」を分離している。用途ごとに配信先リストの持ち方
+（DB、Redis、ファイル等）が変わっても、pushman自体は変更不要になる。
 
-`/`, `/docs`, `/test`, `/settings` は上部にタブナビゲーションがあり、直接URLを打たずに行き来できる。
+## VAPIDとは（Resendとの違い）
 
-## 構成
+mailmanがResendという**第三者の送信代行サービス**（アカウント登録・APIキー取得が必要）を
+使っているのに対し、pushmanのVAPIDは仕組みが根本的に異なる。
+
+- VAPID鍵ペア（公開鍵・秘密鍵）は`web-push`ライブラリで**自前生成**したものであり、
+  どこかのサービスに登録する必要はない
+- ブラウザへの実際の配送は、各ブラウザベンダーが運用する配信網
+  （Chrome/Edge → Google FCM、Firefox → Mozilla Autopush、Safari → Apple Push Notification
+  service）を経由するが、これは**ブラウザが自動的にどこへ送るか決めている**だけで、
+  pushman側やアプリ開発者がそれらのベンダーに個別登録する必要はない
+- VAPID鍵は「このサーバーが正当な送信者である」ことをブラウザの配信網に対して自己証明する
+  ためだけのもの。無料・完全に自己完結している
+
+つまりpushmanの運用にサインアップが必要な外部サービスは存在しない。
+
+## 画面・エンドポイント一覧
+
+| パス | メソッド | 認証 | 内容 |
+|---|---|---|---|
+| `/` | GET | なし | ホーム。タブナビゲーションの起点 |
+| `/vapid-public-key` | GET | なし | VAPID公開鍵を返す。クライアント側の`pushManager.subscribe()`で使用 |
+| `/send` | POST | なし | Push通知送信API本体 |
+| `/test` | GET | なし | このブラウザ自身を購読させてテスト送信できる画面（HTTPS必須） |
+| `/sw.js` | GET | なし | `/test`が使うService Worker本体 |
+| `/settings` | GET/POST | Basic認証 | `.env`の値を閲覧・編集する画面 |
+| `/health` | GET | なし | ヘルスチェック（`{"status":"ok"}`を返すだけ） |
+| `/docs` | GET | なし | APIドキュメント画面（下記`/api-docs`をタブ内にiframe表示） |
+| `/api-docs` | GET | なし | [Scalar](https://scalar.com/)によるAPIドキュメントUI本体 |
+| `/openapi.json` | GET | なし | OpenAPI 3.0 スペック（`/api-docs`が参照する） |
+
+`/`, `/docs`, `/test`, `/settings` の4画面は上部に共通のタブバーがあり、直接URLを
+打たずに行き来できる。
+
+## ディレクトリ構成
 
 ```
-src/
-├── index.js               # エントリーポイント・ルート登録
-├── lib/
-│   └── envFile.js          # .env の読み書き
-└── routes/
-    ├── send.js             # POST /send
-    ├── vapidPublicKey.js   # GET /vapid-public-key
-    ├── settingsPage.js     # GET/POST /settings のHTML
-    └── health.js           # GET /health
+pushman/
+├── Dockerfile
+├── docker-compose.yml
+├── .env.example
+├── run.sh                    # 対話的なデプロイ管理メニュー(update/restart/logs等)
+├── package.json
+└── src/
+    ├── index.js               # エントリーポイント。全ルートをここに登録
+    ├── lib/
+    │   ├── envFile.js          # .env ファイルの読み書き（/settings用）
+    │   ├── nav.js               # タブナビゲーションのHTML生成
+    │   └── theme.js             # 全画面共通のダークテーマCSS
+    └── routes/
+        ├── send.js              # POST /send のZodスキーマ・OpenAPIルート定義
+        ├── vapidPublicKey.js    # GET /vapid-public-key のルート定義
+        ├── health.js            # GET /health のルート定義
+        ├── homePage.js          # GET / のHTML
+        ├── docsPage.js          # GET /docs のHTML（iframeラッパー）
+        ├── settingsPage.js      # GET/POST /settings のHTML・フィールド定義
+        └── testPage.js          # GET /test のHTML・クライアント側JS・Service Worker本体
 ```
 
 ## 環境変数
 
-`.env.example` をコピーして `.env` を作成する。VAPID鍵は以下で生成できる。
+`.env.example` をコピーして `.env` を作成する。
 
 ```bash
-npx web-push generate-vapid-keys
+cp .env.example .env
+npx web-push generate-vapid-keys   # VAPID鍵ペアを生成して.envに貼り付ける
 ```
 
 | 変数名 | 必須 | 説明 |
 |---|---|---|
-| `VAPID_PUBLIC_KEY` | ✅ | VAPID公開鍵 |
-| `VAPID_PRIVATE_KEY` | ✅ | VAPID秘密鍵 |
-| `VAPID_SUBJECT` | — | `mailto:` または `https://` のURL（省略時: `mailto:noreply@yahoi.jp`）|
-| `ADMIN_PASSWORD` | ✅ | `/settings` のBasic認証パスワード（ユーザー名は`admin`固定）|
+| `VAPID_PUBLIC_KEY` | ✅ | VAPID公開鍵。クライアント側にも配布される（`/vapid-public-key`経由） |
+| `VAPID_PRIVATE_KEY` | ✅ | VAPID秘密鍵。外部に漏らしてはいけない |
+| `VAPID_SUBJECT` | — | `mailto:`または`https://`で始まる連絡先URL（省略時: `mailto:noreply@yahoi.jp`）。ブラウザベンダーが送信者に連絡する際に使う |
+| `ADMIN_PASSWORD` | ✅ | `/settings`のBasic認証パスワード（ユーザー名は`admin`固定）。未設定だと`/settings`は500を返しアクセス不可になる |
+| `PORT` | — | コンテナ内リッスンポート（docker-compose側で`3000`固定。通常変更不要） |
 
-## 起動
+## ローカル開発
+
+```bash
+npm install
+npm run dev   # --watch モードで起動（ファイル変更で自動再起動）
+```
+
+`http://localhost:3000` で起動する（`.env`の`PORT`未設定時）。ブラウザPush APIは
+`localhost`もセキュアコンテキスト扱いなので、`/test`もローカルでそのまま動作確認できる。
+
+## Dockerでの起動
 
 ```bash
 cp .env.example .env
-# .env を編集してVAPID鍵を設定
+# .env を編集して VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / ADMIN_PASSWORD を設定
 
 docker compose up -d
 ```
 
-ポート `8766` で起動する。
+ホストの`8766`番ポートにマッピングされる（`docker-compose.yml`参照）。
 
-## API
+`docker-compose.yml`は`.env`ファイル自体を`/app/.env`としてコンテナにバインドマウントしている。
+これは`/settings`画面からの書き込みが、docker-compose自体の変数展開に使われるホスト側`.env`と
+同一ファイルになるようにするため（詳細は[環境設定WebUI](#環境設定webui-settings)を参照）。
+
+`run.sh`を使うと更新・再起動・ログ確認などを対話メニューから実行できる:
+
+```bash
+./run.sh
+```
+
+## 本番デプロイ (h-1)
+
+現在の本番運用は h-1（192.168.0.20）上のDockerコンテナ。
+
+- コンテナ直: `http://192.168.0.20:8766`
+- 外部公開URL: `https://pushman.s-quad.com`（gate上のnginx-proxy-managerが`*.s-quad.com`
+  ワイルドカード証明書でHTTPS終端し、`192.168.0.20:8766`へリバースプロキシしている）
+
+**`/test`のPush購読はブラウザのセキュアコンテキスト制約により`https://`または`localhost`
+経由でないと動作しない**ため、h-1への平文HTTP直アクセス（`http://192.168.0.20:8766/test`）では
+購読ボタンを押しても失敗する。実機テストは必ず`https://pushman.s-quad.com/test`から行うこと。
+
+デプロイ手順（h-1上）:
+
+```bash
+cd ~/docker/pushman
+git pull
+docker compose up -d --build
+```
+
+## API仕様
 
 ### GET /vapid-public-key
 
 クライアント側（ブラウザ）で購読登録する際に使う公開鍵を返す。
 
 ```json
-{ "publicKey": "BN4G..." }
-```
-
-ブラウザ側の購読登録例:
-
-```js
-const { publicKey } = await fetch('https://pushman.example.com/vapid-public-key').then(r => r.json())
-const registration = await navigator.serviceWorker.ready
-const subscription = await registration.pushManager.subscribe({
-  userVisibleOnly: true,
-  applicationServerKey: publicKey,
-})
-// subscription.toJSON() を自分のアプリのサーバーに保存する
+{ "publicKey": "BHmR0TWonHrk2S..." }
 ```
 
 ### POST /send
@@ -97,42 +192,159 @@ const subscription = await registration.pushManager.subscribe({
   "title": "お知らせ",
   "body": "本文",
   "icon": "https://example.com/icon.png",
-  "url": "https://example.com/page"
+  "badge": "https://example.com/badge.png",
+  "url": "https://example.com/page",
+  "data": { "any": "追加情報" }
 }
 ```
 
-**レスポンス (200)**
+| フィールド | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `subscription` | `object` | ✅ | ブラウザの`pushManager.subscribe()`が返すPushSubscriptionオブジェクト |
+| `title` | `string` | ✅ | 通知タイトル |
+| `body` | `string` | — | 通知本文 |
+| `icon` | `string(url)` | — | 通知アイコン画像URL |
+| `badge` | `string(url)` | — | 通知バッジ画像URL（モノクロアイコン向け） |
+| `url` | `string(url)` | — | 通知クリック時に開くURL |
+| `data` | `any` | — | Service Worker側の`push`イベントに渡す任意データ |
+
+**レスポンス (200 OK)**
 
 ```json
 { "success": true }
 ```
 
-**レスポンス (410)** — 購読が無効（期限切れ・解除済み）。呼び出し元でsubscriptionを削除すること。
+**レスポンス (400 Bad Request)** — subscriptionの形式不正など
 
 ```json
-{ "error": "...", "statusCode": 410 }
+{ "error": "エラーメッセージ", "statusCode": 400 }
 ```
 
-詳細は `http://localhost:8766/docs` を参照。
+**レスポンス (410 Gone)** — 購読が期限切れ・ユーザーが通知を解除済み
+
+```json
+{ "error": "エラーメッセージ", "statusCode": 410 }
+```
+
+410が返ってきたら、呼び出し元は保持しているそのsubscriptionを削除するべきタイミング
+（そのブラウザには二度と送れないため）。
+
+curlでの実行例:
+
+```bash
+curl -X POST https://pushman.s-quad.com/send \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subscription": { "endpoint": "...", "keys": { "p256dh": "...", "auth": "..." } },
+    "title": "お知らせ",
+    "body": "こんにちは"
+  }'
+```
+
+### GET /health
+
+```json
+{ "status": "ok" }
+```
+
+## ブラウザ側の購読方法
+
+呼び出し元アプリ（pushmanを使う側のWebアプリ）は、以下の手順でユーザーのブラウザを
+Push通知の購読者にする。
+
+```js
+// 1. pushmanからVAPID公開鍵を取得
+const { publicKey } = await fetch('https://pushman.s-quad.com/vapid-public-key').then(r => r.json())
+
+// 2. Service Workerを登録（'push'イベントをlistenする自前のsw.jsが必要）
+const registration = await navigator.serviceWorker.register('/sw.js')
+await navigator.serviceWorker.ready
+
+// 3. ユーザーに通知許可を求めた上で購読
+const subscription = await registration.pushManager.subscribe({
+  userVisibleOnly: true,
+  applicationServerKey: publicKey,  // base64url文字列をUint8Arrayに変換して渡す（下記参照）
+})
+
+// 4. subscription.toJSON() を自分のアプリのサーバー/DBに保存する
+//    （pushmanは保存しないので、呼び出し側で保持する）
+```
+
+`applicationServerKey`にはUint8Arrayが必要なため、base64url文字列からの変換関数が必要
+（`src/routes/testPage.js`内の`urlBase64ToUint8Array`が実装例）。
 
 ## テスト送信ページ (`/test`)
 
-このページを開いたブラウザ自身に対して、テストのPush通知を送信できる。認証なし（`/send`自体が
-認証なしのため）。
+このページを開いたブラウザ自身を購読させ、そのままそのブラウザへテスト通知を送信できる
+自己完結型の検証ツール。永続化は一切行わず、ページを開いている間だけメモリ上に
+subscriptionを保持する。認証なし（`/send`自体が認証なしのため）。
 
-**HTTPS（または`localhost`）でのアクセスが必須。** ブラウザのPush購読APIはセキュアコンテキスト
-以外では動作しない。`http://<LAN IP>:8766/test` のような平文HTTP経由ではブラウザにブロックされる。
+**HTTPS（または`localhost`）でのアクセスが必須。** ブラウザのPush購読API
+（`pushManager.subscribe()`）はセキュアコンテキスト以外では動作しない。
+`http://<LAN IP>:8766/test`のような平文HTTP経由ではブラウザにブロックされる。
+
+手順:
+
+1. 「1. 通知を許可して購読」を押す → OSの通知許可ダイアログが出るので許可する
+2. 許可されるとフォームが表示されるので、タイトル・本文を入力して「2. テスト送信」
+3. 送信結果（成功/失敗）がその場に表示される
+
+通知が届かない場合は、ブラウザ側の権限だけでなく**OS側の通知設定**（macOSなら
+システム設定 > 通知 > 該当ブラウザアプリ）や、フォーカス/おやすみモードの状態も確認すること。
+サイトの権限とOSの権限は別物であり、どちらもオンでないと通知は表示されない。
 
 ## 環境設定WebUI (`/settings`)
 
-`.env` の値をブラウザから閲覧・編集できる。`admin` / `ADMIN_PASSWORD` のBasic認証で保護されている。
+`.env`の値をブラウザから閲覧・編集できる管理画面。VAPID秘密鍵などの機微情報を扱うため、
+`admin` / `ADMIN_PASSWORD`のBasic認証で保護されている（`ADMIN_PASSWORD`未設定時は
+アクセス自体を500エラーでブロックする）。
 
-保存すると `.env` ファイルが書き換わるだけで、コンテナは自動再起動しない。反映するには
-`docker compose restart`（または `run.sh` の「更新 & 再起動」）を実行する。
+**保存の仕組みと注意点**（mailmanと共通の設計）:
 
-## 開発
+1. フォーム送信すると、コンテナ内の`/app/.env`（＝ホストの`.env`とバインドマウントで同一ファイル）
+   に新しい値が書き込まれる
+2. Node.jsプロセスの`process.env`はプロセス起動時に一度読み込まれるだけなので、
+   ファイルを書き換えても実行中のプロセスには反映されない
+3. 反映するには明示的にコンテナを再起動する必要がある:
 
 ```bash
-npm install
-npm run dev   # --watch モードで起動
+docker compose restart
 ```
+
+自動再起動を実装しない理由: コンテナ自身がdocker composeを操作できるようにするには
+`docker.sock`をコンテナにマウントする必要があり、そのコンテナが侵害された場合ホスト全体の
+Docker環境を操作されるリスクがある。個人運用のツールでそのリスクを取るより、
+手動再起動というひと手間を許容する設計にしている。
+
+## スマートフォンでの利用について
+
+pushmanのWeb Pushは追加実装なしでスマートフォンにも届く。
+
+- **Android Chrome**: アプリのインストールやPWA化は不要。上記の購読フローがそのまま動作し、
+  ブラウザがバックグラウンドでも通知を受信できる
+- **iOS Safari**: iOS 16.4以降が必要。加えて、対象サイトを事前に「ホーム画面に追加」して
+  PWA化しておく必要がある（Apple独自の制約）。追加していない通常のSafariタブでは
+  Web Pushの購読自体ができない
+
+いずれの場合も、ネイティブアプリ向けのFCM/APNs個別実装は不要で、pushmanの
+`POST /send`をそのまま使い回せる。
+
+## トラブルシューティング
+
+**`/test`で「HTTPS（またはlocalhost）でアクセスしてください」と表示される**
+→ 平文HTTP（LAN IP直アクセス等）でアクセスしている。`https://pushman.s-quad.com/test`を使う。
+
+**購読・送信APIは成功しているのに通知が表示されない**
+→ ほぼ確実にOS側の通知設定が原因。macOSなら「システム設定 > 通知 > (ブラウザ名)」で
+通知が許可されているか、通知スタイルが「なし」になっていないか確認する。フォーカス/
+おやすみモードがオンだと画面に出ない（通知センターには記録される）。
+
+**`/settings`で保存したのに反映されない**
+→ 保存は`.env`ファイルへの書き込みのみ。`docker compose restart`を実行したか確認する。
+
+**`/settings`にアクセスすると500が返る**
+→ `ADMIN_PASSWORD`が`.env`に設定されていない。設定して再起動する。
+
+**`POST /send`が410を返す**
+→ そのsubscriptionは期限切れ・解除済み。呼び出し元は保持しているsubscriptionを削除し、
+ユーザーに再購読してもらう必要がある。
