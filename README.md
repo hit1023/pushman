@@ -7,6 +7,7 @@ Hono + OpenAPI で構築され、Docker で動作する。[mailman](https://gith
 
 ## 目次
 
+- [スクリーンショット](#スクリーンショット)
 - [概要](#概要)
 - [設計方針](#設計方針)
 - [VAPIDとは（Resendとの違い）](#vapidとはresendとの違い)
@@ -23,6 +24,16 @@ Hono + OpenAPI で構築され、Docker で動作する。[mailman](https://gith
 - [環境設定WebUI (`/settings`)](#環境設定webui-settings)
 - [スマートフォンでの利用について](#スマートフォンでの利用について)
 - [トラブルシューティング](#トラブルシューティング)
+
+## スクリーンショット
+
+| ホーム | APIドキュメント |
+|---|---|
+| ![ホーム画面](images/home.jpg) | ![APIドキュメント画面](images/docs.jpg) |
+
+| テスト送信 | 設定 |
+|---|---|
+| ![テスト送信画面](images/test.jpg) | ![設定画面](images/settings.jpg) |
 
 ## 概要
 
