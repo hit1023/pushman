@@ -1,4 +1,4 @@
-import { renderNav } from '../lib/nav.js'
+import { renderNav, renderBrand } from '../lib/nav.js'
 import { PAGE_STYLE } from '../lib/theme.js'
 import { FAVICON_LINK } from '../lib/favicon.js'
 
@@ -12,6 +12,7 @@ ${FAVICON_LINK}
 <style>${PAGE_STYLE}</style>
 </head>
 <body>
+  ${renderBrand()}
   ${renderNav('/test')}
   <h1>Pushman テスト送信</h1>
   <p class="desc">このページを開いたブラウザ自身に、テストのPush通知を送ります。HTTPS（または localhost）でアクセスしている必要があります。</p>

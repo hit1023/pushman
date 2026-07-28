@@ -54,6 +54,16 @@ hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
 
 a { color: var(--accent); }
 
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  margin-bottom: 14px;
+}
+.brand img { width: 24px; height: 24px; }
+.brand span { font-weight: 600; font-size: 0.95rem; color: var(--text); }
+
 nav.tabs {
   display: flex;
   gap: 4px;

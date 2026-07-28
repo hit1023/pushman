@@ -1,4 +1,4 @@
-import { renderNav } from '../lib/nav.js'
+import { renderNav, renderBrand } from '../lib/nav.js'
 import { PAGE_STYLE } from '../lib/theme.js'
 import { FAVICON_LINK } from '../lib/favicon.js'
 
@@ -39,6 +39,7 @@ ${FAVICON_LINK}
 <style>${PAGE_STYLE}</style>
 </head>
 <body>
+  ${renderBrand()}
   ${renderNav('/settings')}
   <h1>Pushman 環境設定</h1>
   ${saved ? '<div class="notice">保存しました。反映するには docker compose up -d（またはrun.shの「起動」）が必要です。docker compose restartでは反映されません。</div>' : ''}
