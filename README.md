@@ -11,14 +11,18 @@ subscriptionを自分のDB等で保持し、送信のたびにこのAPIへ渡す
 
 ## 機能
 
+- `GET /` — ホーム（タブナビゲーション）
 - `GET /vapid-public-key` — VAPID公開鍵取得（クライアント側の`pushManager.subscribe()`に使用）
 - `POST /send` — Push通知送信
 - `GET /test` — ブラウザからテスト送信できるページ（HTTPS必須）
 - `GET /sw.js` — テストページ用のService Worker
 - `GET /settings` — 環境設定WebUI（Basic認証必須）
 - `GET /health` — ヘルスチェック
-- `GET /docs` — Scalar による API ドキュメント UI
+- `GET /docs` — API ドキュメント（タブ内にScalar UIをiframe埋め込み）
+- `GET /api-docs` — Scalar による API ドキュメント UI 本体
 - `GET /openapi.json` — OpenAPI 3.0 スペック
+
+`/`, `/docs`, `/test`, `/settings` は上部にタブナビゲーションがあり、直接URLを打たずに行き来できる。
 
 ## 構成
 

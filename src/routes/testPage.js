@@ -1,3 +1,5 @@
+import { renderNav, NAV_STYLE } from '../lib/nav.js'
+
 export function renderTestPage() {
   return `<!doctype html>
 <html lang="ja">
@@ -16,9 +18,11 @@ export function renderTestPage() {
   #subscribeStatus, #sendResult { font-size: 0.85rem; margin-bottom: 16px; white-space: pre-wrap; word-break: break-all; }
   .ok { color: #065f46; }
   .ng { color: #b91c1c; }
+  ${NAV_STYLE}
 </style>
 </head>
 <body>
+  ${renderNav('/test')}
   <h1>Pushman テスト送信</h1>
   <p class="desc">このページを開いたブラウザ自身に、テストのPush通知を送ります。HTTPS（または localhost）でアクセスしている必要があります。</p>
 
