@@ -1,0 +1,18 @@
+services:
+  pushman:
+    build: .
+    container_name: pushman
+    restart: unless-stopped
+    ports:
+      - "8766:3000"
+    environment:
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:noreply@yahoi.jp}
+      PORT: 3000
+    networks:
+      - pushnet
+
+networks:
+  pushnet:
+    driver: bridge
