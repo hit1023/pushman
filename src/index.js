@@ -67,13 +67,18 @@ app.post('/line/webhook', async (c) => {
   const signature = c.req.header('x-line-signature')
 
   if (!verifyLineSignature(rawBody, signature)) {
+    console.error('LINE webhook: invalid signature')
     return c.text('invalid signature', 401)
   }
 
   const body = JSON.parse(rawBody)
+  console.log('LINE webhook received:', JSON.stringify(body.events ?? []))
   for (const event of body.events ?? []) {
     const userId = event.source?.userId
-    if (!userId || !event.replyToken) continue
+    if (!userId || !event.replyToken) {
+      console.log('LINE webhook: skipping event (no userId/replyToken):', event.type)
+      continue
+    }
     if (event.type === 'follow' || event.type === 'message') {
       await replyLineMessage(
         event.replyToken,
