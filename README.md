@@ -13,7 +13,7 @@ Hono + OpenAPI で構築され、Docker で動作する。[mailman](https://gith
 - [環境変数](#環境変数)
 - [ローカル開発](#ローカル開発)
 - [Dockerでの起動](#dockerでの起動)
-- [本番デプロイ (h-1)](#本番デプロイ-h-1)
+- [本番デプロイ例](#本番デプロイ例)
 - [API仕様](#api仕様)
 - [LINE連携](#line連携)
 - [ブラウザ側の購読方法](#ブラウザ側の購読方法)
@@ -158,19 +158,20 @@ docker compose up -d
 ./run.sh
 ```
 
-## 本番デプロイ (h-1)
+## 本番デプロイ例
 
-現在の本番運用は h-1（192.168.0.20）上のDockerコンテナ。
+社内LANのDockerホスト上でコンテナとして常設運用し、リバースプロキシ（nginx-proxy-manager等）で
+独自ドメインにHTTPS公開するのが基本構成。
 
-- コンテナ直: `http://192.168.0.20:8766`
-- 外部公開URL: `https://pushman.s-quad.com`（gate上のnginx-proxy-managerが`*.s-quad.com`
-  ワイルドカード証明書でHTTPS終端し、`192.168.0.20:8766`へリバースプロキシしている）
+- コンテナ直: `http://<デプロイ先ホスト>:8766`
+- 外部公開URL例: `https://pushman.example.com`（ワイルドカード証明書でHTTPS終端し、
+  デプロイ先ホストの8766番へリバースプロキシ）
 
 **`/test`のPush購読はブラウザのセキュアコンテキスト制約により`https://`または`localhost`
-経由でないと動作しない**ため、h-1への平文HTTP直アクセス（`http://192.168.0.20:8766/test`）では
-購読ボタンを押しても失敗する。実機テストは必ず`https://pushman.s-quad.com/test`から行うこと。
+経由でないと動作しない**ため、平文HTTPでのLAN内直アクセスでは購読ボタンを押しても失敗する。
+実機テストは必ずHTTPS化されたURLから行うこと。
 
-デプロイ手順（h-1上）:
+デプロイ手順（デプロイ先ホスト上）:
 
 ```bash
 cd ~/docker/pushman
@@ -239,7 +240,7 @@ docker compose up -d --build
 curlでの実行例:
 
 ```bash
-curl -X POST https://pushman.s-quad.com/send \
+curl -X POST https://pushman.example.com/send \
   -H "Content-Type: application/json" \
   -d '{
     "subscription": { "endpoint": "...", "keys": { "p256dh": "...", "auth": "..." } },
@@ -272,7 +273,7 @@ LINEアカウントでのログインが必要なため、以下は利用者本�
 4. 「Messaging API設定」タブで:
    - 「応答メッセージ」をOFFにする（LINE公式の自動応答と競合させないため）
    - 「Webhookの利用」をONにする
-   - Webhook URLに `https://pushman.s-quad.com/line/webhook` を設定し、検証（Verify）が
+   - Webhook URLに `https://pushman.example.com/line/webhook` を設定し、検証（Verify）が
      成功することを確認する
 
 ### userIdの調べ方
@@ -315,7 +316,7 @@ LINEはメールアドレスや電話番号ではなく、内部的な`userId`�
 curlでの実行例:
 
 ```bash
-curl -X POST https://pushman.s-quad.com/line/send \
+curl -X POST https://pushman.example.com/line/send \
   -H "Content-Type: application/json" \
   -d '{ "to": "U4af4980629...", "message": "こんにちは" }'
 ```
@@ -338,7 +339,7 @@ Push通知の購読者にする。
 
 ```js
 // 1. pushmanからVAPID公開鍵を取得
-const { publicKey } = await fetch('https://pushman.s-quad.com/vapid-public-key').then(r => r.json())
+const { publicKey } = await fetch('https://pushman.example.com/vapid-public-key').then(r => r.json())
 
 // 2. Service Workerを登録（'push'イベントをlistenする自前のsw.jsが必要）
 const registration = await navigator.serviceWorker.register('/sw.js')
@@ -422,7 +423,7 @@ pushmanのWeb Pushは追加実装なしでスマートフォンにも届く。
 ## トラブルシューティング
 
 **`/test`で「HTTPS（またはlocalhost）でアクセスしてください」と表示される**
-→ 平文HTTP（LAN IP直アクセス等）でアクセスしている。`https://pushman.s-quad.com/test`を使う。
+→ 平文HTTP（LAN IP直アクセス等）でアクセスしている。`https://pushman.example.com/test`を使う。
 
 **購読・送信APIは成功しているのに通知が表示されない**
 → ほぼ確実にOS側の通知設定が原因。macOSなら「システム設定 > 通知 > (ブラウザ名)」で
