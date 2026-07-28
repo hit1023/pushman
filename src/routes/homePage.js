@@ -1,5 +1,6 @@
 import { renderNav } from '../lib/nav.js'
 import { PAGE_STYLE } from '../lib/theme.js'
+import { FAVICON_LINK } from '../lib/favicon.js'
 
 export function renderHomePage() {
   return `<!doctype html>
@@ -7,6 +8,7 @@ export function renderHomePage() {
 <head>
 <meta charset="utf-8">
 <title>Pushman</title>
+${FAVICON_LINK}
 <style>${PAGE_STYLE}</style>
 </head>
 <body>

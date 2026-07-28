@@ -13,6 +13,7 @@ import { renderHomePage } from './routes/homePage.js'
 import { renderDocsPage } from './routes/docsPage.js'
 import { lineSendRoute } from './routes/line.js'
 import { pushLineMessage, replyLineMessage, verifyLineSignature } from './lib/line.js'
+import { FAVICON_SVG } from './lib/favicon.js'
 
 webpush.setVapidDetails(
   process.env.VAPID_SUBJECT ?? 'mailto:noreply@yahoi.jp',
@@ -25,6 +26,10 @@ const app = new OpenAPIHono()
 // Routes
 app.get('/', (c) => {
   return c.html(renderHomePage())
+})
+
+app.get('/favicon.svg', (c) => {
+  return c.text(FAVICON_SVG, 200, { 'Content-Type': 'image/svg+xml' })
 })
 
 app.openapi(healthRoute, (c) => {

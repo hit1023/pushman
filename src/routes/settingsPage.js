@@ -1,5 +1,6 @@
 import { renderNav } from '../lib/nav.js'
 import { PAGE_STYLE } from '../lib/theme.js'
+import { FAVICON_LINK } from '../lib/favicon.js'
 
 export const SETTINGS_FIELDS = [
   { key: 'VAPID_PUBLIC_KEY', label: 'VAPID公開鍵', type: 'text' },
@@ -34,6 +35,7 @@ export function renderSettingsPage(values, saved) {
 <head>
 <meta charset="utf-8">
 <title>Pushman 設定</title>
+${FAVICON_LINK}
 <style>${PAGE_STYLE}</style>
 </head>
 <body>
