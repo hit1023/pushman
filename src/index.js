@@ -11,6 +11,8 @@ import { SETTINGS_FIELDS, renderSettingsPage } from './routes/settingsPage.js'
 import { renderTestPage, SERVICE_WORKER_JS } from './routes/testPage.js'
 import { renderHomePage } from './routes/homePage.js'
 import { renderDocsPage } from './routes/docsPage.js'
+import { lineSendRoute } from './routes/line.js'
+import { pushLineMessage, replyLineMessage, verifyLineSignature } from './lib/line.js'
 
 webpush.setVapidDetails(
   process.env.VAPID_SUBJECT ?? 'mailto:noreply@yahoi.jp',
@@ -46,6 +48,41 @@ app.openapi(sendRoute, async (c) => {
     const message = err.body || err.message
     return c.json({ error: message, statusCode }, statusCode === 410 ? 410 : 400)
   }
+})
+
+app.openapi(lineSendRoute, async (c) => {
+  const { to, message } = c.req.valid('json')
+
+  try {
+    await pushLineMessage(to, message)
+    return c.json({ success: true }, 200)
+  } catch (err) {
+    return c.json({ error: err.message }, 400)
+  }
+})
+
+// LINEのWebhook。友だち追加・メッセージ受信時に、送信先(to)として使うuserIdを本人に返信する
+app.post('/line/webhook', async (c) => {
+  const rawBody = await c.req.text()
+  const signature = c.req.header('x-line-signature')
+
+  if (!verifyLineSignature(rawBody, signature)) {
+    return c.text('invalid signature', 401)
+  }
+
+  const body = JSON.parse(rawBody)
+  for (const event of body.events ?? []) {
+    const userId = event.source?.userId
+    if (!userId || !event.replyToken) continue
+    if (event.type === 'follow' || event.type === 'message') {
+      await replyLineMessage(
+        event.replyToken,
+        `あなたのuserIdは:\n${userId}\n\nこれをpushmanの送信先(to)に指定してください。`
+      )
+    }
+  }
+
+  return c.json({ ok: true })
 })
 
 // 設定ページ（.envの閲覧・編集。RESEND_API_KEY等の機微情報を扱うためBasic認証必須）

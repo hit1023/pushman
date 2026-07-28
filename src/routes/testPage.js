@@ -25,6 +25,18 @@ export function renderTestPage() {
   </form>
   <div id="sendResult"></div>
 
+  <hr>
+
+  <h2>LINEテスト送信</h2>
+  <p class="desc">LINE公式アカウントを友だち追加すると自動返信されるuserIdを使って送信します。</p>
+
+  <form id="lineSendForm">
+    <label><span>userId（Uで始まる文字列）</span><input name="to" placeholder="U4af4980629..." required></label>
+    <label><span>メッセージ</span><input name="message" value="pushmanからのLINEテスト送信です" required></label>
+    <button type="submit">LINEへ送信</button>
+  </form>
+  <div id="lineSendResult"></div>
+
 <script>
   let subscription = null
 
@@ -85,6 +97,30 @@ export function renderTestPage() {
 
     try {
       const res = await fetch('/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const json = await res.json()
+      resultEl.className = res.ok ? 'ok' : 'ng'
+      resultEl.textContent = (res.ok ? '送信成功: ' : '送信失敗: ') + JSON.stringify(json)
+    } catch (err) {
+      resultEl.className = 'ng'
+      resultEl.textContent = 'エラー: ' + err.message
+    }
+  })
+
+  document.getElementById('lineSendForm').addEventListener('submit', async (e) => {
+    e.preventDefault()
+    const resultEl = document.getElementById('lineSendResult')
+    const formData = new FormData(e.target)
+    const payload = {
+      to: formData.get('to'),
+      message: formData.get('message'),
+    }
+
+    try {
+      const res = await fetch('/line/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

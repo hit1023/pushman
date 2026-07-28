@@ -5,6 +5,8 @@ export const SETTINGS_FIELDS = [
   { key: 'VAPID_PUBLIC_KEY', label: 'VAPID公開鍵', type: 'text' },
   { key: 'VAPID_PRIVATE_KEY', label: 'VAPID秘密鍵', type: 'password' },
   { key: 'VAPID_SUBJECT', label: 'VAPID Subject (mailto: または https://)', type: 'text' },
+  { key: 'LINE_CHANNEL_ACCESS_TOKEN', label: 'LINEチャネルアクセストークン', type: 'password' },
+  { key: 'LINE_CHANNEL_SECRET', label: 'LINEチャネルシークレット', type: 'password' },
   { key: 'ADMIN_PASSWORD', label: '管理画面パスワード', type: 'password' },
 ]
 

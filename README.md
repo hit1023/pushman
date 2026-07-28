@@ -15,6 +15,7 @@ Hono + OpenAPI で構築され、Docker で動作する。[mailman](https://gith
 - [Dockerでの起動](#dockerでの起動)
 - [本番デプロイ (h-1)](#本番デプロイ-h-1)
 - [API仕様](#api仕様)
+- [LINE連携](#line連携)
 - [ブラウザ側の購読方法](#ブラウザ側の購読方法)
 - [テスト送信ページ (`/test`)](#テスト送信ページ-test)
 - [環境設定WebUI (`/settings`)](#環境設定webui-settings)
@@ -67,7 +68,9 @@ mailmanがResendという**第三者の送信代行サービス**（アカウン
 | `/` | GET | なし | ホーム。タブナビゲーションの起点 |
 | `/vapid-public-key` | GET | なし | VAPID公開鍵を返す。クライアント側の`pushManager.subscribe()`で使用 |
 | `/send` | POST | なし | Push通知送信API本体 |
-| `/test` | GET | なし | このブラウザ自身を購読させてテスト送信できる画面（HTTPS必須） |
+| `/line/send` | POST | なし | LINEメッセージ送信API本体 |
+| `/line/webhook` | POST | 署名検証 | LINEからのWebhookイベント受信。友だち追加・メッセージ受信時にuserIdを自動返信する |
+| `/test` | GET | なし | このブラウザ自身を購読させてテスト送信できる画面（HTTPS必須）。LINEテスト送信フォームも同居 |
 | `/sw.js` | GET | なし | `/test`が使うService Worker本体 |
 | `/settings` | GET/POST | Basic認証 | `.env`の値を閲覧・編集する画面 |
 | `/health` | GET | なし | ヘルスチェック（`{"status":"ok"}`を返すだけ） |
@@ -92,10 +95,12 @@ pushman/
     ├── lib/
     │   ├── envFile.js          # .env ファイルの読み書き（/settings用）
     │   ├── nav.js               # タブナビゲーションのHTML生成
-    │   └── theme.js             # 全画面共通のダークテーマCSS
+    │   ├── theme.js             # 全画面共通のダークテーマCSS
+    │   └── line.js               # LINE Messaging APIの呼び出し・Webhook署名検証
     └── routes/
         ├── send.js              # POST /send のZodスキーマ・OpenAPIルート定義
         ├── vapidPublicKey.js    # GET /vapid-public-key のルート定義
+        ├── line.js              # POST /line/send のZodスキーマ・OpenAPIルート定義
         ├── health.js            # GET /health のルート定義
         ├── homePage.js          # GET / のHTML
         ├── docsPage.js          # GET /docs のHTML（iframeラッパー）
@@ -117,6 +122,8 @@ npx web-push generate-vapid-keys   # VAPID鍵ペアを生成して.envに貼り�
 | `VAPID_PUBLIC_KEY` | ✅ | VAPID公開鍵。クライアント側にも配布される（`/vapid-public-key`経由） |
 | `VAPID_PRIVATE_KEY` | ✅ | VAPID秘密鍵。外部に漏らしてはいけない |
 | `VAPID_SUBJECT` | — | `mailto:`または`https://`で始まる連絡先URL（省略時: `mailto:noreply@yahoi.jp`）。ブラウザベンダーが送信者に連絡する際に使う |
+| `LINE_CHANNEL_ACCESS_TOKEN` | LINE連携を使うなら✅ | LINE Developers Consoleで発行するチャネルアクセストークン（長期） |
+| `LINE_CHANNEL_SECRET` | LINE連携を使うなら✅ | 同コンソールの「チャネル基本設定」に記載のチャネルシークレット。Webhookの署名検証に使用 |
 | `ADMIN_PASSWORD` | ✅ | `/settings`のBasic認証パスワード（ユーザー名は`admin`固定）。未設定だと`/settings`は500を返しアクセス不可になる |
 | `PORT` | — | コンテナ内リッスンポート（docker-compose側で`3000`固定。通常変更不要） |
 
@@ -247,6 +254,83 @@ curl -X POST https://pushman.s-quad.com/send \
 { "status": "ok" }
 ```
 
+## LINE連携
+
+ブラウザ通知はOS/ブラウザ側の通知設定次第で表示が抑制されることがある（実際に本サービスの
+運用中にmacOS Chromeで発生した）。LINEはメッセージがトーク画面に残るため、通知バナーが
+出なくても後から気づける。そのための第2の配信チャネルとして実装している。
+
+### 事前準備（LINE Developers Consoleでの手動セットアップ）
+
+LINEアカウントでのログインが必要なため、以下は利用者本人が行う。
+
+1. [LINE Developers Console](https://developers.line.biz/console/) にログインし、プロバイダーを作成
+2. 「Messaging API」チャネルを新規作成（無料）
+3. チャネル作成後の設定画面で以下を取得し、`/settings`（または`.env`）に設定する:
+   - **チャネルアクセストークン**（長期）— 「Messaging API設定」タブ下部で発行
+   - **チャネルシークレット** — 「チャネル基本設定」タブに記載
+4. 「Messaging API設定」タブで:
+   - 「応答メッセージ」をOFFにする（LINE公式の自動応答と競合させないため）
+   - 「Webhookの利用」をONにする
+   - Webhook URLに `https://pushman.s-quad.com/line/webhook` を設定し、検証（Verify）が
+     成功することを確認する
+
+### userIdの調べ方
+
+LINEはメールアドレスや電話番号ではなく、内部的な`userId`（`U`で始まる文字列）宛にしか
+送信できない。取得方法は、作成したLINE公式アカウントを自分のLINEアプリで友だち追加するか、
+何かメッセージを送ること。`/line/webhook`がその友だち追加/メッセージイベントを受け取り、
+本人にトーク上で`userId`を自動返信する（`src/index.js`の`/line/webhook`ハンドラ参照）。
+返ってきた`userId`を`POST /line/send`の`to`に指定する。
+
+### POST /line/send
+
+```json
+{
+  "to": "U4af4980629...",
+  "message": "お知らせ"
+}
+```
+
+| フィールド | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `to` | `string` | ✅ | 送信先のLINE userId |
+| `message` | `string` | ✅ | 送信するテキストメッセージ |
+
+**レスポンス (200 OK)**
+
+```json
+{ "success": true }
+```
+
+**レスポンス (400 Bad Request)**
+
+```json
+{ "error": "エラーメッセージ" }
+```
+
+チャネルアクセストークンが無効、`to`が存在しないuserId、月間無料メッセージ数（Free プラン:
+月200通）を超過、などの理由で失敗する。
+
+curlでの実行例:
+
+```bash
+curl -X POST https://pushman.s-quad.com/line/send \
+  -H "Content-Type: application/json" \
+  -d '{ "to": "U4af4980629...", "message": "こんにちは" }'
+```
+
+### POST /line/webhook
+
+LINEプラットフォームから送られてくるイベント（友だち追加・メッセージ受信等）を受け取る
+エンドポイント。`x-line-signature`ヘッダーを`LINE_CHANNEL_SECRET`によるHMAC-SHA256で検証し、
+一致しない場合は401を返す（`src/lib/line.js`の`verifyLineSignature`）。LINE Developers
+Console以外からの呼び出しは全て拒否される。
+
+`follow`（友だち追加）または`message`イベントを受信すると、そのイベントの送信者に対して
+`userId`を返信する。これは無料の「reply API」を使っており、`POST /line/send`の
+月間送信数カウントには影響しない。
+
 ## ブラウザ側の購読方法
 
 呼び出し元アプリ（pushmanを使う側のWebアプリ）は、以下の手順でユーザーのブラウザを
@@ -348,3 +432,12 @@ pushmanのWeb Pushは追加実装なしでスマートフォンにも届く。
 **`POST /send`が410を返す**
 → そのsubscriptionは期限切れ・解除済み。呼び出し元は保持しているsubscriptionを削除し、
 ユーザーに再購読してもらう必要がある。
+
+**友だち追加してもLINEでuserIdが返信されない**
+→ LINE Developers Consoleの「Messaging API設定」で「Webhookの利用」がONになっているか、
+Webhook URLの検証（Verify）が成功しているか確認する。「応答メッセージ」がONのままだと
+LINE公式の自動応答が優先されうるので、OFFにしておくこと。
+
+**`POST /line/send`が400を返す**
+→ `error`メッセージを確認する。よくある原因: `LINE_CHANNEL_ACCESS_TOKEN`が無効、
+`to`のuserIdが不正、Freeプランの月間無料メッセージ数（200通）を超過。
