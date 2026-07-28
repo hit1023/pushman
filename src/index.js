@@ -8,6 +8,7 @@ import { vapidPublicKeyRoute } from './routes/vapidPublicKey.js'
 import { healthRoute } from './routes/health.js'
 import { readEnvFile, writeEnvFile } from './lib/envFile.js'
 import { SETTINGS_FIELDS, renderSettingsPage } from './routes/settingsPage.js'
+import { renderTestPage, SERVICE_WORKER_JS } from './routes/testPage.js'
 
 webpush.setVapidDetails(
   process.env.VAPID_SUBJECT ?? 'mailto:noreply@yahoi.jp',
@@ -62,6 +63,15 @@ app.post('/settings', async (c) => {
   }
   writeEnvFile(updates)
   return c.redirect('/settings?saved=1')
+})
+
+// テスト送信ページ（このブラウザ自身を購読し、/sendへテスト送信する）
+app.get('/test', (c) => {
+  return c.html(renderTestPage())
+})
+
+app.get('/sw.js', (c) => {
+  return c.text(SERVICE_WORKER_JS, 200, { 'Content-Type': 'application/javascript' })
 })
 
 // OpenAPI spec
