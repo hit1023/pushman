@@ -1,3 +1,5 @@
+<img src="images/mascot.svg" width="96" height="96" alt="pushmanのマスコット">
+
 # pushman
 
 VAPID (`web-push`) を使ったシンプルなWeb Push通知送信 REST API。
